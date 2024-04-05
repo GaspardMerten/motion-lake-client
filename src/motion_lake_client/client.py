@@ -4,6 +4,8 @@ from typing import Protocol, Dict, Any, List
 
 import requests
 
+__all__ = ['Item', 'Collection', 'NetworkClient', 'RequestsClient', 'InnerClient', 'BaseClient']
+
 
 @dataclasses.dataclass
 class Item:
@@ -67,18 +69,21 @@ class InnerClient:
         """
         return self.network_client.post(f"/collection/", {"name": collection_name})
 
-    def store(self, collection_name: str, data: bytes, timestamp: int, content_type: str = None) -> dict:
+    def store(self, collection_name: str, data: bytes, timestamp: int, content_type: str = None,
+              create_collection: bool = False) -> dict:
         """
         Store the given data in the collection with the given name.
         :param collection_name: The name of the collection to store the data in
         :param data: The data to store
         :param timestamp: The timestamp to associate with the data
         :param content_type: The type of the data
+        :param create_collection: Whether to create the collection if it does not exist
         :return: None
         """
         return self.network_client.post(
             f"/store/{collection_name}/",
-            {"data": data.hex(), "timestamp": timestamp, "content_type": content_type}
+            {"data": data.hex(), "timestamp": timestamp, "content_type": content_type,
+             "create_collection": create_collection, }
         )
 
     def query(self, collection_name: str, min_timestamp: int, max_timestamp: int, ascending: bool,
@@ -147,8 +152,9 @@ class BaseClient:
     def create_collection(self, collection_name: str) -> dict:
         return self.inner_client.create_collection(collection_name)
 
-    def store(self, collection_name: str, data: bytes, timestamp: int, content_type: str = None) -> dict:
-        return self.inner_client.store(collection_name, data, timestamp, content_type)
+    def store(self, collection_name: str, data: bytes, timestamp: int, content_type: str = None,
+              create_collection: bool = False) -> dict:
+        return self.inner_client.store(collection_name, data, timestamp, content_type, create_collection)
 
     def query(self, collection_name: str, min_timestamp: int, max_timestamp: int, ascending: bool,
               limit: int = None, offset: int = 0) -> dict:
