@@ -205,8 +205,8 @@ class InnerClient:
             f"/advanced/{collection_name}/",
             {
                 "query": query,
-                "min_timestamp": int(min_timestamp.timestamp() * 1000),
-                "max_timestamp": int(max_timestamp.timestamp() * 1000),
+                "min_timestamp": int(min_timestamp.timestamp() ),
+                "max_timestamp": int(max_timestamp.timestamp() ),
             },
         )
 
@@ -242,12 +242,12 @@ class BaseClient:
         self,
         collection_name: str,
         data: bytes,
-        timestamp: int,
+        timestamp: datetime,
         content_type: ContentType = None,
         create_collection: bool = False,
     ) -> dict:
         return self.inner_client.store(
-            collection_name, data, timestamp, content_type, create_collection
+            collection_name, data, int(timestamp.timestamp()), content_type, create_collection
         )
 
     def query(
@@ -264,8 +264,8 @@ class BaseClient:
 
         return self.inner_client.query(
             collection_name,
-            int(min_datetime.timestamp() * 1000),
-            int(max_datetime.timestamp() * 1000),
+            int(min_datetime.timestamp()),
+            int(max_datetime.timestamp()),
             ascending,
             limit,
             offset,
