@@ -140,6 +140,14 @@ Retrieve items from a collection based on various criteria:
   for item in first_items:
       print("Timestamp:", item.timestamp, "Data:", item.data)
   ```
+  
+- **Get Items but skip data (only load timestamps)**:
+  ```python
+  first_items = client.get_first_items("weather_data", 5, skip_data=True)
+  for item in first_items:
+      print("Timestamp:", item.timestamp)
+      assert item.data is None, "Data should be None, otherwise developer made a mistake (aka me)" 
+  ```
 
 ### Advanced Queries
 
@@ -168,6 +176,7 @@ print(response)
   response = client.delete_collection("weather_data")
   print(response)
   ```
+
 
 ## Contributing
 

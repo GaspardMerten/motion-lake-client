@@ -22,6 +22,10 @@ MAX_DATE = datetime(2250, 12, 31, 23, 59, 59, 999999)
 MIN_DATE = datetime(1971, 1, 1, 0, 0, 0, 0)
 
 
+class ServerError(Exception):
+    pass
+
+
 @dataclasses.dataclass
 class Item:
     """
@@ -63,6 +67,7 @@ class NetworkClient(Protocol):
 
     def delete(self, url: str, body: dict = None) -> dict: ...
 
+
 class RequestsClient(NetworkClient):
     """
     A network client using the requests library.
@@ -74,7 +79,10 @@ class RequestsClient(NetworkClient):
 
     def get(self, url: str, query_params: Dict[str, Any] = None) -> dict:
         try:
-            return requests.get(self.base_url + url, params=query_params).json()
+            response = requests.get(self.base_url + url, params=query_params)
+            if response.status_code > 399:
+                raise ServerError("Server error occurred, message: " + response.text)
+            return response.json()
         except requests.exceptions.RequestException:
             return {"error": "A request error occurred."}
         except requests.exceptions.JSONDecodeError:
@@ -82,7 +90,10 @@ class RequestsClient(NetworkClient):
 
     def post(self, url: str, body: dict) -> dict:
         try:
-            return requests.post(self.base_url + url, json=body).json()
+            response = requests.post(self.base_url + url, json=body)
+            if response.status_code > 399:
+                raise ServerError("Server error occurred, message: " + response.text)
+            return response.json()
         except requests.exceptions.RequestException as e:
             return {"error": "A request error occurred."}
         except requests.exceptions.JSONDecodeError as e:
@@ -90,7 +101,10 @@ class RequestsClient(NetworkClient):
 
     def delete(self, url: str, body: dict = None) -> dict:
         try:
-            return requests.delete(self.base_url + url, json=body).json()
+            response = requests.delete(self.base_url + url, json=body)
+            if response.status_code > 399:
+                raise ServerError("Server error occurred, message: " + response.text)
+            return response.json()
         except requests.exceptions.RequestException:
             return {"error": "A request error occurred."}
         except requests.exceptions.JSONDecodeError:
@@ -151,7 +165,7 @@ class InnerClient:
         max_timestamp: int,
         ascending: bool,
         limit: int = None,
-        offset: int = None,
+        skip_data: bool = False,
     ) -> dict:
         """
         Query the data in the collection with the given name.
@@ -160,7 +174,7 @@ class InnerClient:
         :param max_timestamp: The maximum timestamp to filter the data
         :param ascending: Whether to sort the data in ascending order
         :param limit: The limit of the data to retrieve
-        :param offset: The offset of the data to retrieve
+        :param skip_data: Whether to skip the data in the results (data will be None)
         :return: The data in the collection as a list of tuples of bytes and datetime
         """
         return self.network_client.get(
@@ -170,7 +184,7 @@ class InnerClient:
                 "max_timestamp": max_timestamp,
                 "ascending": ascending,
                 "limit": limit or 1,
-                "offset": offset or 0,
+                "skip_data": skip_data,
             },
         )
 
@@ -214,8 +228,8 @@ class InnerClient:
             f"/advanced/{collection_name}/",
             {
                 "query": query,
-                "min_timestamp": int(min_timestamp.timestamp() ),
-                "max_timestamp": int(max_timestamp.timestamp() ),
+                "min_timestamp": int(min_timestamp.timestamp()),
+                "max_timestamp": int(max_timestamp.timestamp()),
             },
         )
 
@@ -259,7 +273,11 @@ class BaseClient:
         create_collection: bool = False,
     ) -> dict:
         return self.inner_client.store(
-            collection_name, data, int(timestamp.timestamp()), content_type, create_collection
+            collection_name,
+            data,
+            int(timestamp.timestamp()),
+            content_type,
+            create_collection,
         )
 
     def query(
@@ -269,7 +287,7 @@ class BaseClient:
         max_datetime: datetime,
         ascending: bool,
         limit: int = None,
-        offset: int = 0,
+        skip_data: bool = False,
     ) -> dict:
         min_datetime = min_datetime or MIN_DATE
         max_datetime = max_datetime or MAX_DATE
@@ -280,23 +298,23 @@ class BaseClient:
             int(max_datetime.timestamp()),
             ascending,
             limit,
-            offset,
+            skip_data,
         )
 
-    def get_last_items(self, collection_name: str, limit: int) -> List[Item]:
-        response = self.query(collection_name, MIN_DATE, datetime.now(), False, limit)
+    def get_last_items(self, collection_name: str, limit: int, skip_data: bool = False) -> List[Item]:
+        response = self.query(collection_name, MIN_DATE, datetime.now(), False, limit, skip_data)
         return self._parse_results(response["results"])
 
-    def get_last_item(self, collection_name: str) -> Item:
-        results = self.get_last_items(collection_name, 1)
+    def get_last_item(self, collection_name: str, skip_data: bool = False) -> Item:
+        results = self.get_last_items(collection_name, 1, skip_data)
         return (results or [None])[0]
 
-    def get_first_items(self, collection_name: str, limit: int) -> List[Item]:
-        response = self.query(collection_name, MIN_DATE, datetime.now(), True, limit)
+    def get_first_items(self, collection_name: str, limit: int, skip_data: bool = False) -> List[Item]:
+        response = self.query(collection_name, MIN_DATE, datetime.now(), True, limit, skip_data)
         return self._parse_results(response["results"])
 
-    def get_first_item(self, collection_name: str) -> Item:
-        items = self.get_first_items(collection_name, 1)
+    def get_first_item(self, collection_name: str, skip_data: bool = False) -> Item:
+        items = self.get_first_items(collection_name, 1, skip_data)
 
         return (items or [None])[0]
 
@@ -307,22 +325,22 @@ class BaseClient:
         max_datetime: datetime,
         ascending: bool = True,
         limit: int = None,
-        offset: int = None,
+        skip_data: bool = False,
     ) -> List[Item]:
         response = self.query(
-            collection_name, min_datetime, max_datetime, ascending, limit, offset
+            collection_name, min_datetime, max_datetime, ascending, limit, skip_data
         )
         return self._parse_results(response["results"])
 
     def get_items_before(
-        self, collection_name: str, date: datetime, limit: int
+        self, collection_name: str, date: datetime, limit: int, skip_data: bool = False
     ) -> List[Item]:
-        return self.get_items_between(collection_name, MIN_DATE, date, False, limit)
+        return self.get_items_between(collection_name, MIN_DATE, date, False, limit, skip_data)
 
     def get_items_after(
-        self, collection_name: str, timestamp: datetime, limit: int
+        self, collection_name: str, timestamp: datetime, limit: int, skip_data: bool = False
     ) -> List[Item]:
-        return self.get_items_between(collection_name, timestamp, MAX_DATE, True, limit)
+        return self.get_items_between(collection_name, timestamp, MAX_DATE, True, limit, skip_data)
 
     def get_collections(self) -> List[Collection]:
         return self.inner_client.get_collections()
