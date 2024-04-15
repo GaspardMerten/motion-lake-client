@@ -61,6 +61,7 @@ class NetworkClient(Protocol):
 
     def post(self, url: str, body: dict) -> dict: ...
 
+    def delete(self, url: str, body: dict = None) -> dict: ...
 
 class RequestsClient(NetworkClient):
     """
@@ -74,9 +75,9 @@ class RequestsClient(NetworkClient):
     def get(self, url: str, query_params: Dict[str, Any] = None) -> dict:
         try:
             return requests.get(self.base_url + url, params=query_params).json()
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             return {"error": "A request error occurred."}
-        except requests.exceptions.JSONDecodeError as e:
+        except requests.exceptions.JSONDecodeError:
             return {"error": "The response could not be decoded."}
 
     def post(self, url: str, body: dict) -> dict:
@@ -85,6 +86,14 @@ class RequestsClient(NetworkClient):
         except requests.exceptions.RequestException as e:
             return {"error": "A request error occurred."}
         except requests.exceptions.JSONDecodeError as e:
+            return {"error": "The response could not be decoded."}
+
+    def delete(self, url: str, body: dict = None) -> dict:
+        try:
+            return requests.delete(self.base_url + url, json=body).json()
+        except requests.exceptions.RequestException:
+            return {"error": "A request error occurred."}
+        except requests.exceptions.JSONDecodeError:
             return {"error": "The response could not be decoded."}
 
 
@@ -210,6 +219,9 @@ class InnerClient:
             },
         )
 
+    def delete_collection(self, collection_name: str):
+        return self.network_client.delete(f"/delete/{collection_name}/", {})
+
 
 class BaseClient:
     def __init__(self, lake_url: str = "http://localhost:8000"):
@@ -328,3 +340,6 @@ class BaseClient:
         return self.inner_client.advanced_query(
             collection_name, query, min_timestamp, max_timestamp
         )
+
+    def delete_collection(self, collection_name: str):
+        return self.inner_client.delete_collection(collection_name)
