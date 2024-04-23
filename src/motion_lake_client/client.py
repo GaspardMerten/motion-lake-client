@@ -1,4 +1,6 @@
 import dataclasses
+import json
+import os
 from datetime import datetime
 from enum import Enum
 from typing import Protocol, Dict, Any, List
@@ -65,6 +67,8 @@ class NetworkClient(Protocol):
 
     def post(self, url: str, body: dict) -> dict: ...
 
+    def raw_post(self, url: str, body: bytes) -> dict: ...
+
     def delete(self, url: str, body: dict = None) -> dict: ...
 
 
@@ -91,6 +95,16 @@ class RequestsClient(NetworkClient):
     def post(self, url: str, body: dict) -> dict:
         try:
             response = requests.post(self.base_url + url, json=body)
+            if response.status_code > 399:
+                raise ServerError("Server error occurred, message: " + response.text)
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"error": "A request error occurred."}
+        except requests.exceptions.JSONDecodeError as e:
+            return {"error": "The response could not be decoded."}
+    def raw_post(self, url: str, body: bytes) -> dict:
+        try:
+            response = requests.post(self.base_url + url, data=body)
             if response.status_code > 399:
                 raise ServerError("Server error occurred, message: " + response.text)
             return response.json()
@@ -148,14 +162,16 @@ class InnerClient:
         :param create_collection: Whether to create the collection if it does not exist
         :return: None
         """
-        return self.network_client.post(
+        metadata = {"timestamp": timestamp, "create_collection": create_collection}
+
+        if content_type is not None:
+            metadata["content_type"] = content_type.value
+
+        out = json.dumps(metadata).encode("utf-8") + '\n'.encode("utf-8") + data
+
+        return self.network_client.raw_post(
             f"/store/{collection_name}/",
-            {
-                "data": data.hex(),
-                "timestamp": timestamp,
-                "content_type": content_type.value if content_type else None,
-                "create_collection": create_collection,
-            },
+            out,
         )
 
     def query(
@@ -178,7 +194,7 @@ class InnerClient:
         :return: The data in the collection as a list of tuples of bytes and datetime
         """
         return self.network_client.get(
-            f"/query/{collection_name}/",
+            f"/query/{collection_name}",
             {
                 "min_timestamp": min_timestamp,
                 "max_timestamp": max_timestamp,
@@ -193,7 +209,7 @@ class InnerClient:
         Get a list of all collections.
         :return: A list of collections
         """
-        collections = self.network_client.get("/collections/")
+        collections = self.network_client.get("/collections")
         return [
             Collection(
                 name=collection["name"],
@@ -235,6 +251,9 @@ class InnerClient:
 
     def delete_collection(self, collection_name: str):
         return self.network_client.delete(f"/delete/{collection_name}/", {})
+
+    def get_collection_size(self, collection_name) -> int:
+        return self.network_client.get(f"/size/{collection_name}")["size"]
 
 
 class BaseClient:
@@ -361,3 +380,7 @@ class BaseClient:
 
     def delete_collection(self, collection_name: str):
         return self.inner_client.delete_collection(collection_name)
+
+    def get_collection_size(self, collection_name: str) -> int:
+        return self.inner_client.get_collection_size(collection_name)
+
