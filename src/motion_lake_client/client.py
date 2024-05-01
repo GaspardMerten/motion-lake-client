@@ -1,6 +1,5 @@
 import dataclasses
 import json
-import os
 from datetime import datetime
 from enum import Enum
 from typing import Protocol, Dict, Any, List
@@ -234,6 +233,9 @@ class InnerClient:
         query: str,
         min_timestamp: datetime,
         max_timestamp: datetime,
+        offset: int = None,
+        limit: int = None,
+        ascending: bool = True,
     ):
         assert (
             "[table]" in query
@@ -246,6 +248,9 @@ class InnerClient:
                 "query": query,
                 "min_timestamp": int(min_timestamp.timestamp()),
                 "max_timestamp": int(max_timestamp.timestamp()),
+                "offset": offset,
+                "limit": limit,
+                "ascending": ascending,
             },
         )
 
@@ -370,12 +375,29 @@ class BaseClient:
         query: str,
         min_timestamp: datetime,
         max_timestamp: datetime,
+            offset: int = None,
+            limit: int = None,
+            ascending: bool = True,
     ):
+        """
+        Perform an advanced query on the given collection.
+
+        The query must contain a [table] placeholder, which will be replaced with a view on a table.
+
+        :param collection_name: The name of the collection to query
+        :param query: The query to perform
+        :param min_timestamp: The minimum timestamp to filter the data
+        :param max_timestamp: The maximum timestamp to filter the data
+        :param offset: The offset of the data to retrieve
+        :param limit: The limit of the data to retrieve
+        :param ascending: Whether to sort the data in ascending order
+        :return: The data in the collection as a list of tuples of bytes and datetime
+        """
         assert (
             "[table]" in query
         ), """Query must contain [table] placeholder (it will be replaced with a view on a table)"""
         return self.inner_client.advanced_query(
-            collection_name, query, min_timestamp, max_timestamp
+            collection_name, query, min_timestamp, max_timestamp, offset, limit, ascending
         )
 
     def delete_collection(self, collection_name: str):
